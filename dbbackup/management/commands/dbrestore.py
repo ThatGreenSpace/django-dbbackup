@@ -13,6 +13,8 @@ from ... import utils
 from ...dbcommands import DBCommands
 from ...storage.base import BaseStorage
 from ...storage.base import StorageError
+
+import django
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
@@ -20,25 +22,48 @@ from django.core.management.base import LabelCommand
 from django.db import connection
 from optparse import make_option
 
-
 # Fix Python 2.x.
 try:
     input = raw_input  # @ReservedAssignment
 except NameError:
     pass
 
+if django.VERSION < (1, 10):
+    _BaseCommand = LabelCommand
+else:
+    _BaseCommand = BaseCommand
 
-class Command(LabelCommand):
+
+class Command(_BaseCommand):
     help = "dbrestore [-d <dbname>] [-f <filename>] [-s <servername>]"
-    option_list = BaseCommand.option_list + (
-        make_option("-d", "--database", help="Database to restore"),
-        make_option("-f", "--filepath", help="Specific file to backup from"),
-        make_option("-x", "--backup-extension", help="The extension to use when scanning for files to restore from."),
-        make_option("-s", "--servername", help="Use a different servername backup"),
-        make_option("-l", "--list", action='store_true', default=False, help="List backups in the backup directory"),
-        make_option("-c", "--decrypt", help="Decrypt data before restoring", default=False, action='store_true'),
-        make_option("-z", "--uncompress", help="Uncompress gzip data before restoring", action='store_true'),
-    )
+
+    if django.VERSION < (1, 10):
+        option_list = BaseCommand.option_list + (
+            make_option("-d", "--database", help="Database to restore"),
+            make_option("-f", "--filepath", help="Specific file to backup from"),
+            make_option("-x", "--backup-extension",
+                        help="The extension to use when scanning for files to restore from."),
+            make_option("-s", "--servername", help="Use a different servername backup"),
+            make_option("-l", "--list", action='store_true', default=False,
+                        help="List backups in the backup directory"),
+            make_option("-c", "--decrypt", help="Decrypt data before restoring", default=False, action='store_true'),
+            make_option("-z", "--uncompress", help="Uncompress gzip data before restoring", action='store_true'),
+        )
+
+    def add_arguments(self, parser):
+        if django.VERSION < (1, 10):
+            return
+        parser.add_argument("-d", "--database", help="Database to restore")
+        parser.add_argument("-f", "--filepath", help="Specific file to backup from")
+        parser.add_argument("-x", "--backup-extension", help="The extension to use when scanning for files to restore "
+                                                             "from.")
+        parser.add_argument("-s", "--servername", help="Use a different servername backup")
+        parser.add_argument("-l", "--list", action='store_true', default=False, help="List backups in the backup "
+                                                                                     "directory")
+        parser.add_argument("-c", "--decrypt", help="Decrypt data before restoring", default=False,
+                            action='store_true'),
+        parser.add_argument("-p", "--passphrase", help="Passphrase for decrypt file", default=None)
+        parser.add_argument("-z", "--uncompress", help="Uncompress gzip data before restoring", action='store_true')
 
     def handle(self, **options):
         """ Django command handler. """
@@ -122,10 +147,10 @@ class Command(LabelCommand):
         def get_passphrase():
             print('Input Passphrase: ')
             return input()
-        
+
         temp_dir = tempfile.mkdtemp()
         try:
-            inputfile.fileno()   # Convert inputfile from SpooledTemporaryFile to regular file (Fixes Issue #21)
+            inputfile.fileno()  # Convert inputfile from SpooledTemporaryFile to regular file (Fixes Issue #21)
             new_basename = os.path.basename(inputfile.name).replace('.gpg', '')
             temp_filename = os.path.join(temp_dir, new_basename)
             try:

@@ -8,6 +8,7 @@ import tempfile
 from optparse import make_option
 import re
 
+import django
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
@@ -20,11 +21,20 @@ from dbbackup import settings as dbbackup_settings
 
 class Command(BaseCommand):
     help = "backup_media [--encrypt]"
-    option_list = BaseCommand.option_list + (
-        make_option("-c", "--clean", help="Clean up old backup files", action="store_true", default=False),
-        make_option("-s", "--servername", help="Specify server name to include in backup filename"),
-        make_option("-e", "--encrypt", help="Encrypt the backup files", action="store_true", default=False),
-    )
+
+    if django.VERSION < (1, 10):
+        option_list = BaseCommand.option_list + (
+            make_option("-c", "--clean", help="Clean up old backup files", action="store_true", default=False),
+            make_option("-s", "--servername", help="Specify server name to include in backup filename"),
+            make_option("-e", "--encrypt", help="Encrypt the backup files", action="store_true", default=False),
+        )
+
+    def add_arguments(self, parser):
+        if django.VERSION < (1, 10):
+            return
+        parser.add_argument("-c", "--clean", help="Clean up old backup files", action="store_true", default=False)
+        parser.add_argument("-s", "--servername", help="Specify server name to include in backup filename")
+        parser.add_argument("-e", "--encrypt", help="Encrypt the backup files", action="store_true", default=False)
 
     @utils.email_uncaught_exception
     def handle(self, *args, **options):

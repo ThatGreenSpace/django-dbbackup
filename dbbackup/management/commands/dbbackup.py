@@ -9,6 +9,8 @@ import datetime
 import tempfile
 import gzip
 from shutil import copyfileobj
+
+import django
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
@@ -22,15 +24,32 @@ from dbbackup.storage.base import StorageError
 from dbbackup import settings as dbbackup_settings
 
 
-class Command(LabelCommand):
+if django.VERSION < (1, 10):
+    _BaseCommand = LabelCommand
+else:
+    _BaseCommand = BaseCommand
+
+
+class Command(_BaseCommand):
     help = "dbbackup [-c] [-d <dbname>] [-s <servername>] [--compress] [--encrypt]"
-    option_list = BaseCommand.option_list + (
-        make_option("-c", "--clean", help="Clean up old backup files", action="store_true", default=False),
-        make_option("-d", "--database", help="Database to backup (default: everything)"),
-        make_option("-s", "--servername", help="Specify server name to include in backup filename"),
-        make_option("-z", "--compress", help="Compress the backup files", action="store_true", default=False),
-        make_option("-e", "--encrypt", help="Encrypt the backup files", action="store_true", default=False),
-    )
+
+    if django.VERSION < (1, 10):
+        option_list = BaseCommand.option_list + (
+            make_option("-c", "--clean", help="Clean up old backup files", action="store_true", default=False),
+            make_option("-d", "--database", help="Database to backup (default: everything)"),
+            make_option("-s", "--servername", help="Specify server name to include in backup filename"),
+            make_option("-z", "--compress", help="Compress the backup files", action="store_true", default=False),
+            make_option("-e", "--encrypt", help="Encrypt the backup files", action="store_true", default=False),
+        )
+
+    def add_arguments(self, parser):
+        if django.VERSION < (1, 10):
+            return
+        parser.add_argument("-c", "--clean", help="Clean up old backup files", action="store_true", default=False)
+        parser.add_argument("-d", "--database", help="Database to backup (default: everything)")
+        parser.add_argument("-s", "--servername", help="Specify server name to include in backup filename")
+        parser.add_argument("-z", "--compress", help="Compress the backup files", action="store_true", default=False)
+        parser.add_argument("-e", "--encrypt", help="Encrypt the backup files", action="store_true", default=False)
 
     @utils.email_uncaught_exception
     def handle(self, **options):
@@ -58,7 +77,7 @@ class Command(LabelCommand):
     def save_new_backup(self, database, database_name):
         """ Save a new backup file. """
         print("Backing Up Database: %s" % database['NAME'])
-        filename = self.dbcommands.filename(self.servername)
+        filename = database_name + ".backup"
         outputfile = tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024)
         self.dbcommands.run_backup_commands(outputfile)
         if self.compress:
